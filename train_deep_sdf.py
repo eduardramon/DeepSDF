@@ -13,6 +13,7 @@ import time
 
 import deep_sdf
 from deep_sdf.data import SDFSamples, SurfaceSamples
+from deep_sdf.samplers import NormalPerPoint as Sampler
 import deep_sdf.workspace as ws
 
 
@@ -338,7 +339,9 @@ def main_function(experiment_directory, continue_from, batch_split):
     code_reg_lambda = get_spec_with_default(specs, "CodeRegularizationLambda", 1e-4)
     do_geometric_regularization = get_spec_with_default(specs, "GeometricRegularization", True)
     geometric_reg_lambda = get_spec_with_default(specs, "GeometricRegularizationLambda", 1e-1)
-
+    global_sigma = get_spec_with_default(specs, "SamplerGlobalSigma", 1.8)
+    local_sigma = get_spec_with_default(specs, "SamplerLocalSigma", 0.01)
+    geometric_reg_sampler = Sampler(global_sigma, local_sigma)
 
     code_bound = get_spec_with_default(specs, "CodeBound", None)
 
@@ -482,26 +485,29 @@ def main_function(experiment_directory, continue_from, batch_split):
 
         for sdf_data, indices in sdf_loader:
 
+            batch_size, samples, dim = sdf_data.size()
+
             # Process the input data
             sdf_data = sdf_data.reshape(-1, 4)
-
+            sdf_data.requires_grad = False
             num_sdf_samples = sdf_data.shape[0]
 
-            sdf_data.requires_grad = False
-
+            # Get input data points
             xyz = sdf_data[:, 0:3]
-            sdf_gt = sdf_data[:, 3].unsqueeze(1)
+            xyz = torch.chunk(xyz, batch_split) # Batching
 
-            if enforce_minmax:
-                sdf_gt = torch.clamp(sdf_gt, minT, maxT)
-
-            xyz = torch.chunk(xyz, batch_split)
+            # Get scene indices
             indices = torch.chunk(
                 indices.unsqueeze(-1).repeat(1, num_samp_per_scene).view(-1),
                 batch_split,
             )
 
+            # Get sdf groundtruth
+            sdf_gt = sdf_data[:, 3].unsqueeze(1)
+            if enforce_minmax:
+                sdf_gt = torch.clamp(sdf_gt, minT, maxT)
             sdf_gt = torch.chunk(sdf_gt, batch_split)
+
 
             batch_loss = 0.0
 
@@ -515,7 +521,6 @@ def main_function(experiment_directory, continue_from, batch_split):
 
                 # NN optimization
                 pred_sdf = decoder(input)
-                grad = gradient(input, pred_sdf)
 
                 if enforce_minmax:
                     pred_sdf = torch.clamp(pred_sdf, minT, maxT)
@@ -533,6 +538,15 @@ def main_function(experiment_directory, continue_from, batch_split):
                     chunk_loss = chunk_loss + reg_loss
 
                 if do_geometric_regularization:
+                    if sample_type == "Surface":
+                        xyz_eikonal = geometric_reg_sampler.get_points(xyz[i].unsqueeze(dim=0)).squeeze()
+                        input_eikonal = torch.cat([batch_vecs, xyz_eikonal], dim=1)
+                        pred_sdf_eikonal = decoder(input_eikonal)
+                    else:
+                        input_eikonal = input
+                        pred_sdf_eikonal = pred_sdf
+
+                    grad = gradient(input_eikonal, pred_sdf_eikonal)
                     eikonal_loss = ((grad.norm(2, dim=-1) - 1) ** 2).mean()
                     chunk_loss += geometric_reg_lambda * eikonal_loss
 
