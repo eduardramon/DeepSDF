@@ -8,29 +8,30 @@ import os
 import random
 import torch
 import torch.utils.data
+import trimesh
 
 import deep_sdf.workspace as ws
 
 
-def get_instance_filenames(data_source, split):
-    npzfiles = []
+def get_instance_filenames(data_source, split, samples_subdir=ws.sdf_samples_subdir, extension=".npz"):
+    instance_filenames = []
     for dataset in split:
         for class_name in split[dataset]:
             for instance_name in split[dataset][class_name]:
                 instance_filename = os.path.join(
-                    dataset, class_name, instance_name + ".npz"
+                    dataset, class_name, instance_name + extension
                 )
                 if not os.path.isfile(
-                    os.path.join(data_source, ws.sdf_samples_subdir, instance_filename)
+                    os.path.join(data_source, samples_subdir, instance_filename)
                 ):
                     # raise RuntimeError(
                     #     'Requested non-existent file "' + instance_filename + "'"
                     # )
                     logging.warning(
-                        "Requested non-existent file '{}'".format(instance_filename)
+                        "Requested non-existent file '{}'".format(os.path.join(data_source, samples_subdir, instance_filename))
                     )
-                npzfiles += [instance_filename]
-    return npzfiles
+                instance_filenames += [instance_filename]
+    return instance_filenames
 
 
 class NoMeshFileError(RuntimeError):
@@ -86,6 +87,19 @@ def unpack_sdf_samples(filename, subsample=None):
     sample_neg = torch.index_select(neg_tensor, 0, random_neg)
 
     samples = torch.cat([sample_pos, sample_neg], 0)
+
+    return samples
+
+
+def unpack_surface_samples(filename, subsample=None):
+    samples = torch.from_numpy(trimesh.load_mesh(filename).vertices).float()
+    if subsample is None:
+        return samples
+
+    random_idx = (torch.rand(subsample) * subsample).long()
+    samples = torch.index_select(samples, 0, random_idx)
+    labels = torch.zeros(subsample, 1, dtype=torch.float)
+    samples = torch.cat([samples, labels], axis=1)
 
     return samples
 
@@ -169,3 +183,32 @@ class SDFSamples(torch.utils.data.Dataset):
             )
         else:
             return unpack_sdf_samples(filename, self.subsample), idx
+
+class SurfaceSamples(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data_source,
+        split,
+        subsample,
+        load_ram=False
+    ):
+        self.subsample = subsample
+        self.data_source = data_source
+        self.instance_filenames = get_instance_filenames(data_source, split, samples_subdir=ws.surface_samples_subdir, extension='.obj')
+
+        logging.debug(
+            "using "
+            + str(len(self.instance_filenames))
+            + " shapes from data source "
+            + data_source
+        )
+
+    def __len__(self):
+        return len(self.instance_filenames)
+
+    def __getitem__(self, idx):
+        filename = os.path.join(
+            self.data_source, ws.surface_samples_subdir, self.instance_filenames[idx]
+        )
+
+        return unpack_surface_samples(filename, self.subsample), idx

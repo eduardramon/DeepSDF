@@ -12,6 +12,7 @@ import json
 import time
 
 import deep_sdf
+from deep_sdf.data import SDFSamples, SurfaceSamples
 import deep_sdf.workspace as ws
 
 
@@ -355,7 +356,9 @@ def main_function(experiment_directory, continue_from, batch_split):
     with open(train_split_file, "r") as f:
         train_split = json.load(f)
 
-    sdf_dataset = deep_sdf.data.SDFSamples(
+    sample_type = get_spec_with_default(specs, "SampleType", "SDF" )
+    SamplesClass = SDFSamples if sample_type == "SDF" else SurfaceSamples
+    sdf_dataset = SamplesClass(
         data_source, train_split, num_samp_per_scene, load_ram=False
     )
 
