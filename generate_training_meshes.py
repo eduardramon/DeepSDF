@@ -37,7 +37,7 @@ def code_to_mesh(experiment_directory, checkpoint, keep_normalized=False):
 
     decoder.load_state_dict(saved_model_state["model_state_dict"])
 
-    decoder = decoder.module.cuda()
+    decoder = decoder.module.cuda() if torch.cuda.is_available() else decoder.module.cpu()
 
     decoder.eval()
 
