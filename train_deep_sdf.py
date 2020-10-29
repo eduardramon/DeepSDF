@@ -248,6 +248,18 @@ def append_parameter_magnitudes(param_mag_log, model):
         param_mag_log[name].append(param.data.norm().item())
 
 
+def gradient(inputs, outputs):
+    d_points = torch.ones_like(outputs, requires_grad=False, device=outputs.device)
+    points_grad = torch.autograd.grad(
+        outputs=outputs,
+        inputs=inputs,
+        grad_outputs=d_points,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True)[0][:, -3:]
+    return points_grad
+
+
 def main_function(experiment_directory, continue_from, batch_split):
 
     logging.debug("running " + experiment_directory)
@@ -323,6 +335,9 @@ def main_function(experiment_directory, continue_from, batch_split):
 
     do_code_regularization = get_spec_with_default(specs, "CodeRegularization", True)
     code_reg_lambda = get_spec_with_default(specs, "CodeRegularizationLambda", 1e-4)
+    do_geometric_regularization = get_spec_with_default(specs, "GeometricRegularization", True)
+    geometric_reg_lambda = get_spec_with_default(specs, "GeometricRegularizationLambda", 1e-1)
+
 
     code_bound = get_spec_with_default(specs, "CodeBound", None)
 
@@ -497,6 +512,7 @@ def main_function(experiment_directory, continue_from, batch_split):
 
                 # NN optimization
                 pred_sdf = decoder(input)
+                grad = gradient(input, pred_sdf)
 
                 if enforce_minmax:
                     pred_sdf = torch.clamp(pred_sdf, minT, maxT)
@@ -512,6 +528,10 @@ def main_function(experiment_directory, continue_from, batch_split):
 
                     reg_loss = reg_loss.cuda() if torch.cuda.is_available() else reg_loss.cpu()
                     chunk_loss = chunk_loss + reg_loss
+
+                if do_geometric_regularization:
+                    eikonal_loss = ((grad.norm(2, dim=-1) - 1) ** 2).mean()
+                    chunk_loss += geometric_reg_lambda * eikonal_loss
 
                 chunk_loss.backward()
 
