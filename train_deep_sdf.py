@@ -501,7 +501,7 @@ def main_function(experiment_directory, continue_from, batch_split):
                 if enforce_minmax:
                     pred_sdf = torch.clamp(pred_sdf, minT, maxT)
 
-                sdf_gt_i = sdf_gt[i].gpu() if torch.cuda.is_available() else sdf_gt[i].cpu()
+                sdf_gt_i = sdf_gt[i].cuda() if torch.cuda.is_available() else sdf_gt[i].cpu()
                 chunk_loss = loss_l1(pred_sdf, sdf_gt_i) / num_sdf_samples
 
                 if do_code_regularization:
