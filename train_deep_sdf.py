@@ -305,7 +305,7 @@ def main_function(experiment_directory, continue_from, batch_split):
             param_group["lr"] = lr_schedules[i].get_learning_rate(epoch)
 
     def empirical_stat(latent_vecs, indices):
-        lat_mat = torch.zeros(0).cuda()
+        lat_mat = torch.zeros(0).cuda() if torch.cuda.is_available() else torch.zeros(0).cpu()
         for ind in indices:
             lat_mat = torch.cat([lat_mat, latent_vecs[ind]], 0)
         mean = torch.mean(lat_mat, 0)
@@ -326,7 +326,8 @@ def main_function(experiment_directory, continue_from, batch_split):
 
     code_bound = get_spec_with_default(specs, "CodeBound", None)
 
-    decoder = arch.Decoder(latent_size, **specs["NetworkSpecs"]).cuda()
+    decoder = arch.Decoder(latent_size, **specs["NetworkSpecs"])
+    decoder = decoder.cuda() if torch.cuda.is_available() else decoder.cpu()
 
     logging.info("training with {} GPU(s)".format(torch.cuda.device_count()))
 
@@ -345,13 +346,15 @@ def main_function(experiment_directory, continue_from, batch_split):
 
     num_data_loader_threads = get_spec_with_default(specs, "DataLoaderThreads", 1)
     logging.debug("loading data with {} threads".format(num_data_loader_threads))
-
+    gpu_args = {}
+    if torch.cuda.is_available():
+        gpu_args['num_workers'] = num_data_loader_threads
     sdf_loader = data_utils.DataLoader(
         sdf_dataset,
         batch_size=scene_per_batch,
         shuffle=True,
-        num_workers=num_data_loader_threads,
         drop_last=True,
+        **gpu_args
     )
 
     logging.debug("torch num_threads: {}".format(torch.get_num_threads()))
@@ -498,7 +501,8 @@ def main_function(experiment_directory, continue_from, batch_split):
                 if enforce_minmax:
                     pred_sdf = torch.clamp(pred_sdf, minT, maxT)
 
-                chunk_loss = loss_l1(pred_sdf, sdf_gt[i].cuda()) / num_sdf_samples
+                sdf_gt_i = sdf_gt[i].cuda() if torch.cuda.is_available() else sdf_gt[i].cpu()
+                chunk_loss = loss_l1(pred_sdf, sdf_gt_i) / num_sdf_samples
 
                 if do_code_regularization:
                     l2_size_loss = torch.sum(torch.norm(batch_vecs, dim=1))
@@ -506,7 +510,8 @@ def main_function(experiment_directory, continue_from, batch_split):
                         code_reg_lambda * min(1, epoch / 100) * l2_size_loss
                     ) / num_sdf_samples
 
-                    chunk_loss = chunk_loss + reg_loss.cuda()
+                    reg_loss = reg_loss.cuda() if torch.cuda.is_available() else reg_loss.cpu()
+                    chunk_loss = chunk_loss + reg_loss
 
                 chunk_loss.backward()
 
