@@ -341,7 +341,7 @@ def main_function(experiment_directory, continue_from, batch_split):
     geometric_reg_lambda = get_spec_with_default(specs, "GeometricRegularizationLambda", 1e-1)
     global_sigma = get_spec_with_default(specs, "SamplerGlobalSigma", 0.5)
     local_sigma = get_spec_with_default(specs, "SamplerLocalSigma", 0.01)
-    geometric_reg_sampler = Sampler(global_sigma, local_sigma, device=('cuda' if torch.cuda.is_available() else 'cpu'))
+    geometric_reg_sampler = Sampler(global_sigma, local_sigma)
 
     code_bound = get_spec_with_default(specs, "CodeBound", None)
 
@@ -473,6 +473,8 @@ def main_function(experiment_directory, continue_from, batch_split):
         )
     )
 
+    lat_vecs = lat_vecs.cuda() if torch.cuda.is_available() else lat_vecs.cpu()
+
     for epoch in range(start_epoch, num_epochs + 1):
 
         start = time.time()
@@ -484,6 +486,9 @@ def main_function(experiment_directory, continue_from, batch_split):
         adjust_learning_rate(lr_schedules, optimizer_all, epoch)
 
         for sdf_data, indices in sdf_loader:
+
+            sdf_data = sdf_data.cuda() if torch.cuda.is_available() else sdf_data.cpu()
+            indices = indices.cuda() if torch.cuda.is_available() else indices.cpu()
 
             batch_size, samples, dim = sdf_data.size()
 
@@ -525,8 +530,7 @@ def main_function(experiment_directory, continue_from, batch_split):
                 if enforce_minmax:
                     pred_sdf = torch.clamp(pred_sdf, minT, maxT)
 
-                sdf_gt_i = sdf_gt[i].cuda() if torch.cuda.is_available() else sdf_gt[i].cpu()
-                chunk_loss = loss_l1(pred_sdf, sdf_gt_i) / num_sdf_samples
+                chunk_loss = loss_l1(pred_sdf, sdf_gt[i]) / num_sdf_samples
 
                 if do_code_regularization:
                     l2_size_loss = torch.sum(torch.norm(batch_vecs, dim=1))
@@ -534,7 +538,6 @@ def main_function(experiment_directory, continue_from, batch_split):
                         code_reg_lambda * min(1, epoch / 100) * l2_size_loss
                     ) / num_sdf_samples
 
-                    reg_loss = reg_loss.cuda() if torch.cuda.is_available() else reg_loss.cpu()
                     chunk_loss = chunk_loss + reg_loss
 
                 if do_geometric_regularization:

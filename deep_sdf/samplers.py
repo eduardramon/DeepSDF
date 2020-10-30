@@ -11,17 +11,16 @@ class Sampler(metaclass=abc.ABCMeta):
 
 class NormalPerPoint(Sampler):
 
-    def __init__(self, global_sigma=1.0, local_sigma=0.01, dimension=3, device='cuda'):
+    def __init__(self, global_sigma=1.0, local_sigma=0.01, dimension=3):
         self.dimension=3
         self.global_sigma = global_sigma
         self.local_sigma = local_sigma
-        self.device = device
 
-    def get_points_global(self, n_points, batch_size=None):
+    def get_points_global(self, n_points, batch_size=None, device='cpu'):
         if batch_size:
-            return (torch.rand(batch_size, n_points, self.dimension, device=self.device) * (self.global_sigma * 2)) - self.global_sigma
+            return (torch.rand(batch_size, n_points, self.dimension, device=device) * (self.global_sigma * 2)) - self.global_sigma
         else:
-            return (torch.rand(n_points, self.dimension, device=self.device) * (self.global_sigma * 2)) - self.global_sigma
+            return (torch.rand(n_points, self.dimension, device=device) * (self.global_sigma * 2)) - self.global_sigma
 
     def get_points_local(self, pc_input, n_points):
         if len(pc_input.size()) == 3:
@@ -43,6 +42,6 @@ class NormalPerPoint(Sampler):
         n_points_global = n_points - n_points_local
 
         return torch.cat([
-            self.get_points_global(n_points_global, batch_size),
+            self.get_points_global(n_points_global, batch_size, device=pc_input.device),
             self.get_points_local(pc_input, n_points_local)
             ], dim=1)
