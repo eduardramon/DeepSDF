@@ -341,7 +341,7 @@ def main_function(experiment_directory, continue_from, batch_split):
     geometric_reg_lambda = get_spec_with_default(specs, "GeometricRegularizationLambda", 1e-1)
     global_sigma = get_spec_with_default(specs, "SamplerGlobalSigma", 1.8)
     local_sigma = get_spec_with_default(specs, "SamplerLocalSigma", 0.01)
-    geometric_reg_sampler = Sampler(global_sigma, local_sigma)
+    geometric_reg_sampler = Sampler(global_sigma, local_sigma, device=('cuda' if torch.cuda.is_available() else 'cpu'))
 
     code_bound = get_spec_with_default(specs, "CodeBound", None)
 

@@ -11,22 +11,38 @@ class Sampler(metaclass=abc.ABCMeta):
 
 class NormalPerPoint(Sampler):
 
-    def __init__(self, global_sigma, local_sigma=0.01):
+    def __init__(self, global_sigma=1.0, local_sigma=0.01, dimension=3, device='cuda'):
+        self.dimension=3
         self.global_sigma = global_sigma
         self.local_sigma = local_sigma
+        self.device = device
 
-    def get_points(self, pc_input, local_ratio=0.8, local_sigma=None):
-        batch_size, sample_size, dim = pc_input.shape
-
-        samples_size_local = int(local_ratio*sample_size)
-        samples_size_global = sample_size - samples_size_local
-        if local_sigma is not None:
-            sample_local = pc_input[:,:samples_size_local, :] + (torch.randn_like(pc_input[:,:samples_size_local, :]) * local_sigma.unsqueeze(-1))
+    def get_points_global(self, n_points, batch_size=None):
+        if batch_size:
+            return (torch.rand(batch_size, n_points, self.dimension, device=self.device) * (self.global_sigma * 2)) - self.global_sigma
         else:
-            sample_local = pc_input[:,:samples_size_local, :] + (torch.randn_like(pc_input[:,:samples_size_local, :]) * self.local_sigma)
+            return (torch.rand(n_points, self.dimension, device=self.device) * (self.global_sigma * 2)) - self.global_sigma
 
-        sample_global = (torch.rand(batch_size, samples_size_global, dim, device=pc_input.device) * (self.global_sigma * 2)) - self.global_sigma
+    def get_points_local(self, pc_input, n_points):
+        if len(pc_input.size()) == 3:
+            return pc_input[:,:n_points, :] + (torch.randn_like(pc_input[:,:n_points, :]) * self.local_sigma)
+        elif len(pc_input.size()) == 2:
+            return pc_input[:n_points, :] + (torch.randn_like(pc_input[:n_points, :]) * self.local_sigma)
 
-        sample = torch.cat([sample_local, sample_global], dim=1)
 
-        return sample
+    def get_points(self, pc_input, n_points=None, local_ratio=0.8):
+        if len(pc_input.size()) == 3:
+            batch_size, sample_size, dim = pc_input.shape
+        elif len(pc_input.size()) == 2:
+            sample_size, dim = pc_input.shape
+            batch_size = None
+
+        if not n_points: n_points = sample_size
+
+        n_points_local = int(local_ratio * n_points)
+        n_points_global = n_points - n_points_local
+
+        return torch.cat([
+            self.get_points_global(n_points_global, batch_size),
+            self.get_points_local(pc_input, n_points_local)
+            ], dim=1)
