@@ -92,16 +92,24 @@ def unpack_sdf_samples(filename, subsample=None):
 
 
 def unpack_surface_samples(filename, subsample=None):
-    samples = torch.from_numpy(trimesh.load_mesh(filename).vertices).float()
-    if subsample is None:
-        return samples
 
-    random_idx = (torch.rand(subsample) * subsample).long()
-    samples = torch.index_select(samples, 0, random_idx)
-    labels = torch.zeros(subsample, 1, dtype=torch.float)
-    samples = torch.cat([samples, labels], axis=1)
+    memmap_filename = f'{filename}.memmap'
+    if os.path.exists(memmap_filename):
+        vertices = np.memmap(memmap_filename, dtype='float32', mode='r').reshape(-1,3).astype(np.float32)
+    else:
+        vertices = trimesh.load_mesh(filename).vertices.astype(np.float32)
+        fp = np.memmap(memmap_filename, dtype='float32', mode='w+', shape=vertices.shape)
+        fp[:] = vertices[:]
+        del fp
 
-    return samples
+    if subsample:
+        random_idx = np.random.randint(len(vertices), size=subsample)
+        vertices = vertices[random_idx]
+
+    labels = np.zeros((len(vertices), 1), dtype=np.float32)
+    samples = np.concatenate((vertices, labels), axis=1)
+
+    return torch.from_numpy(samples)
 
 
 def unpack_sdf_samples_from_ram(data, subsample=None):
