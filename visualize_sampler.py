@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     # Sample points and add them to the scene
     vertices = torch.from_numpy(mesh.vertices).float()
-    sampler = Sampler(global_sigma=args.global_sigma, local_sigma=args.local_sigma, device='cpu')
+    sampler = Sampler(global_sigma=args.global_sigma, local_sigma=args.local_sigma)
     p_global = sampler.get_points_global(args.max_points//2)
     p_local = sampler.get_points_local(vertices, args.max_points//2)
     for idx, (p_g, p_l) in enumerate(zip(p_global, p_local)):
