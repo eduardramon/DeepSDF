@@ -523,6 +523,7 @@ def main_function(experiment_directory, continue_from, batch_split):
                 batch_vecs = lat_vecs(indices[i])
 
                 input = torch.cat([batch_vecs, xyz[i]], dim=1)
+                input.requires_grad_()
 
                 # NN optimization
                 pred_sdf = decoder(input)
@@ -544,6 +545,7 @@ def main_function(experiment_directory, continue_from, batch_split):
                     if sample_type == "Surface":
                         xyz_eikonal = geometric_reg_sampler.get_points(xyz[i].unsqueeze(dim=0)).squeeze()
                         input_eikonal = torch.cat([batch_vecs, xyz_eikonal], dim=1)
+                        input_eikonal.requires_grad_()
                         pred_sdf_eikonal = decoder(input_eikonal)
                     else:
                         input_eikonal = input
