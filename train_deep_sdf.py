@@ -478,9 +478,6 @@ def main_function(experiment_directory, continue_from, batch_split):
     for epoch in range(start_epoch, num_epochs + 1):
 
         start = time.time()
-
-        logging.info("epoch {}...".format(epoch))
-
         decoder.train()
 
         adjust_learning_rate(lr_schedules, optimizer_all, epoch)
@@ -515,6 +512,9 @@ def main_function(experiment_directory, continue_from, batch_split):
 
 
             batch_loss = 0.0
+            batch_sdf_loss = 0.0
+            batch_latent_loss = 0.0
+            batch_grad_loss = 0.0
 
             optimizer_all.zero_grad()
 
@@ -531,15 +531,12 @@ def main_function(experiment_directory, continue_from, batch_split):
                 if enforce_minmax:
                     pred_sdf = torch.clamp(pred_sdf, minT, maxT)
 
-                chunk_loss = loss_l1(pred_sdf, sdf_gt[i]) / num_sdf_samples
+                sdf_loss = loss_l1(pred_sdf, sdf_gt[i]) / num_sdf_samples
+                chunk_loss = sdf_loss
 
                 if do_code_regularization:
-                    l2_size_loss = torch.sum(torch.norm(batch_vecs, dim=1))
-                    reg_loss = (
-                        code_reg_lambda * min(1, epoch / 100) * l2_size_loss
-                    ) / num_sdf_samples
-
-                    chunk_loss = chunk_loss + reg_loss
+                    latent_loss = torch.sum(torch.norm(batch_vecs, dim=1)) / num_sdf_samples
+                    chunk_loss = chunk_loss + code_reg_lambda * min(1, epoch / 100) * latent_loss
 
                 if do_geometric_regularization:
                     if sample_type == "Surface":
@@ -552,12 +549,15 @@ def main_function(experiment_directory, continue_from, batch_split):
                         pred_sdf_eikonal = pred_sdf
 
                     grad = gradient(input_eikonal, pred_sdf_eikonal)
-                    eikonal_loss = ((grad.norm(2, dim=-1) - 1) ** 2).mean()
+                    eikonal_loss = torch.sum((grad.norm(2, dim=-1) - 1) ** 2) / num_sdf_samples
                     chunk_loss += geometric_reg_lambda * eikonal_loss
 
                 chunk_loss.backward()
 
                 batch_loss += chunk_loss.item()
+                batch_sdf_loss += sdf_loss.item()
+                if do_code_regularization: batch_latent_loss += latent_loss.item()
+                if do_geometric_regularization: batch_grad_loss += eikonal_loss.item()
 
             logging.debug("loss = {}".format(batch_loss))
 
@@ -574,7 +574,7 @@ def main_function(experiment_directory, continue_from, batch_split):
         seconds_elapsed = end - start
         timing_log.append(seconds_elapsed)
 
-        logging.info(f'Loss: {batch_loss} - Time elapsed: {seconds_elapsed}')
+        logging.info('Epoch: {}: Loss: {:.6f} - SDF loss: {:.6f} - Latent loss: {:.6f} - Grad loss: {:.6f}'.format(epoch, batch_loss, batch_sdf_loss, batch_latent_loss, batch_grad_loss))
 
         lr_log.append([schedule.get_learning_rate(epoch) for schedule in lr_schedules])
 
