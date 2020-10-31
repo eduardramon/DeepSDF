@@ -572,6 +572,8 @@ def main_function(experiment_directory, continue_from, batch_split):
         seconds_elapsed = end - start
         timing_log.append(seconds_elapsed)
 
+        logging.info(f'Loss: {batch_loss} - Time elapsed: {seconds_elapsed}')
+
         lr_log.append([schedule.get_learning_rate(epoch) for schedule in lr_schedules])
 
         lat_mag_log.append(get_mean_latent_vector_magnitude(lat_vecs))
