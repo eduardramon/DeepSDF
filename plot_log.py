@@ -17,7 +17,7 @@ def running_mean(x, N):
 
 def load_logs(experiment_directory, type):
 
-    logs = torch.load(os.path.join(experiment_directory, ws.logs_filename))
+    logs = torch.load(os.path.join(experiment_directory, ws.logs_filename), map_location=torch.device('cpu'))
 
     logging.info("latest epoch is {}".format(logs["epoch"]))
 
