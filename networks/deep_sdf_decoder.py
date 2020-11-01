@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2004-present Facebook. All Rights Reserved.
 
+import numpy as np
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
@@ -19,6 +20,7 @@ class Decoder(nn.Module):
         xyz_in_all=None,
         use_tanh=False,
         latent_dropout=False,
+        radius_init=1
     ):
         super(Decoder, self).__init__()
 
@@ -45,14 +47,22 @@ class Decoder(nn.Module):
                 if self.xyz_in_all and layer != self.num_layers - 2:
                     out_dim -= 3
 
+            lin = nn.Linear(dims[layer], out_dim)
+            if layer == self.num_layers - 2:
+                torch.nn.init.normal_(lin.weight, mean=np.sqrt(np.pi) / np.sqrt(dims[layer]), std=0.00001)
+                torch.nn.init.constant_(lin.bias, -radius_init)
+            else:
+                torch.nn.init.constant_(lin.bias, 0.0)
+                torch.nn.init.normal_(lin.weight, 0.0, np.sqrt(2) / np.sqrt(out_dim))
+
             if weight_norm and layer in self.norm_layers:
                 setattr(
                     self,
                     "lin" + str(layer),
-                    nn.utils.weight_norm(nn.Linear(dims[layer], out_dim)),
+                    nn.utils.weight_norm(lin),
                 )
             else:
-                setattr(self, "lin" + str(layer), nn.Linear(dims[layer], out_dim))
+                setattr(self, "lin" + str(layer), lin)
 
             if (
                 (not weight_norm)
