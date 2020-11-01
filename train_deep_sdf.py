@@ -536,7 +536,7 @@ def main_function(experiment_directory, continue_from, batch_split):
 
                 if do_code_regularization:
                     latent_loss = torch.sum(torch.norm(batch_vecs, dim=1)) / num_sdf_samples
-                    chunk_loss = chunk_loss + code_reg_lambda * min(1, epoch / 100) * latent_loss
+                    chunk_loss = chunk_loss + code_reg_lambda * latent_loss
 
                 if do_geometric_regularization:
                     if sample_type == "Surface":
